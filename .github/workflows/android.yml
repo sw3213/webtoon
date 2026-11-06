@@ -1,0 +1,48 @@
+name: 툰뷰어 APK 빌드
+
+on:
+  push:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: APK 만들기
+        working-directory: android
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: 파일 이름 정리
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk ToonViewer.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ToonViewer-apk
+          path: ToonViewer.apk
+
+      - name: 다운로드 링크 만들기 (Releases)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete viewer-latest --yes --cleanup-tag || true
+          gh release create viewer-latest ToonViewer.apk \
+            --title "툰뷰어 최신 APK" \
+            --notes "폰에서 ToonViewer.apk 를 눌러 받은 뒤 설치하세요. (브랜치: ${GITHUB_REF_NAME}, 커밋: ${GITHUB_SHA::7})" \
+            --target "$GITHUB_SHA" --prerelease

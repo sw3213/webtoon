@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+웹툰다운로드/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
