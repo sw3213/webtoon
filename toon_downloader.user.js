@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         툰 자동 다운로더 (toon_img)
 // @namespace    https://github.com/sw3213/webtoon
-// @version      5.5
+// @version      5.6
 // @description  id="toon_img" 이미지를 1번부터 순서대로 폴더 또는 ZIP으로 저장하고 다음 화로 자동 이동. 이미 받은 화는 건너뜀.
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -21,7 +21,7 @@
   const KEY_DONE = 'toon_done';   // 받은 화 주소 목록
   const KEY_STOP = 'toon_stop';   // 중지 상태
   const KEY_MODE = 'toon_mode';   // 'folder' 또는 'zip'
-  const VERSION = '5.5';
+  const VERSION = '5.6';
   const pageKey = location.href.split('#')[0];
   const done = GM_getValue(KEY_DONE, {});
   const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
@@ -32,7 +32,7 @@
     'padding:14px 16px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.5);font:13px/1.5 -apple-system,"Malgun Gothic",sans-serif;' +
     'min-width:240px;max-width:320px;border:1px solid #ff7a2e';
   ui.innerHTML = '<div id="tdMsg"></div><div style="margin-top:8px;display:flex;gap:6px;align-items:center">' +
-    '<button id="tdBtn"></button><button id="tdMode"></button><button id="tdRe">↻ 다시 받기</button>' +
+    '<button id="tdBtn"></button><button id="tdMode"></button><button id="tdRe">↻ 다시 받기</button><button id="tdSpeed"></button>' +
     '<span style="margin-left:auto;color:#9b968c;font-size:11px">v' + VERSION + '</span></div>';
   document.body.appendChild(ui);
   const msg = (h) => { ui.querySelector('#tdMsg').innerHTML = h; };
@@ -57,6 +57,15 @@
     GM_setValue(KEY_STOP, false);
     location.reload();
   };
+
+  // 속도: 보통 = 4장씩, 3초 쉼 / 빠름 = 8장씩, 1초 쉼
+  const fast = GM_getValue('toon_fast', false);
+  const PARALLEL = fast ? 8 : 4, WAIT = fast ? 1 : 3;
+  const spBtn = ui.querySelector('#tdSpeed');
+  spBtn.style.cssText = modeBtn.style.cssText;
+  spBtn.textContent = fast ? '속도: 빠름' : '속도: 보통';
+  spBtn.onclick = () => { GM_setValue('toon_fast', !fast); spBtn.textContent = !fast ? '속도: 빠름 (다음 화부터)' : '속도: 보통 (다음 화부터)'; };
+  ui.querySelector('#tdMsg').parentElement.lastElementChild.style.flexWrap = 'wrap';
 
   const stopped = GM_getValue(KEY_STOP, false);
   btn.textContent = stopped ? '▶ 자동 다운로드 켜기' : '■ 중지';
@@ -110,7 +119,7 @@
   function goNext() {
     const n = nextUrl();
     if (!n) { msg(ui.querySelector('#tdMsg').innerHTML + '<br>🎉 다음 화 버튼을 못 찾아 끝냈어요. 끝!<br><span style="color:#9b968c">다음 화가 있다면 F12 → Console의 [툰] 줄을 캡처해 주세요</span>'); return; }
-    let sec = 3;
+    let sec = WAIT;
     const tick = () => {
       if (GM_getValue(KEY_STOP, false)) return;
       ui.querySelector('#tdNext').textContent = sec + '초 후 다음 화로 이동…';
@@ -271,7 +280,7 @@
         msg(`📥 <b>${esc(title)}</b><br>받는 중 ${ok} / ${total}` + (fails.length ? ` · 실패 ${fails.length}` : ''));
       }
     }
-    await Promise.all(Array.from({ length: Math.min(4, total) }, worker));
+    await Promise.all(Array.from({ length: Math.min(PARALLEL, total) }, worker));
 
     if (fails.length) {
       msg(`⚠️ <b>${esc(title)}</b><br>${fails.length}장 실패 (${fails.slice(0, 10).join(', ')}번)<br>새로고침하면 다시 시도합니다. 자동 이동 멈춤.`);
