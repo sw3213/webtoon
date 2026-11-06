@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>이미지 순차 다운로더 & ZIP 압축기</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <!-- JSZip -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- FileSaver.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 font-bold text-xl">
+          IMG
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900 leading-tight">이미지 순차 다운로더 & ZIP 압축기</h1>
+          <p class="text-xs text-slate-500">HTML 태그 속 이미지 추출 · 번호순 정렬 · ZIP 일괄 저장</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          GitHub Pages 호환 (Client-side 100%)
+        </span>
+        <button id="btnToggleHelp" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors">
+          배포 & 실무 팁 안내
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Help & Guide Modal / Panel -->
+  <div id="helpModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-start mb-4">
+        <h3 class="text-lg font-bold text-slate-900">GitHub Pages 배포 및 실무 꿀팁</h3>
+        <button id="btnCloseHelp" class="text-slate-400 hover:text-slate-600 p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="space-y-4 text-sm text-slate-600">
+        <div class="p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
+          <h4 class="font-bold text-blue-900 mb-1">1. GitHub Pages 웹사이트로 무료 배포하기</h4>
+          <ol class="list-decimal list-inside space-y-1 text-xs text-blue-800">
+            <li>GitHub에서 새 저장소(Repository) 생성 (예: <code class="bg-blue-100 px-1 py-0.5 rounded">image-downloader</code>)</li>
+            <li>이 <code class="bg-blue-100 px-1 py-0.5 rounded">index.html</code> 파일을 저장소 루트에 업로드 및 커밋</li>
+            <li>저장소의 <strong>Settings &gt; Pages</strong> 메뉴로 이동</li>
+            <li>Build and deployment에서 Branch를 <code class="bg-blue-100 px-1 py-0.5 rounded">main</code> (또는 master) / root 로 선택 후 Save</li>
+            <li>1분 뒤 <code class="bg-blue-100 px-1 py-0.5 rounded">https://사용자명.github.io/image-downloader</code> 웹사이트 자동 완성!</li>
+          </ol>
+        </div>
+
+        <div class="p-3.5 bg-amber-50 border border-amber-200 rounded-xl">
+          <h4 class="font-bold text-amber-900 mb-1">2. 브라우저 보안 제약(CORS) 대응 안내</h4>
+          <p class="text-xs text-amber-800 leading-relaxed">
+            웹 브라우저는 보안상 다른 사이트의 이미지를 스크립트로 다운로드할 때 <strong>CORS 차단</strong>이 발생할 수 있습니다. 이미지가 차단되어 다운로드가 안 될 경우 아래 방법 중 하나를 활용하세요:
+          </p>
+          <ul class="list-disc list-inside mt-2 space-y-1 text-xs text-amber-800">
+            <li><strong>CORS 프록시 옵션 켜기:</strong> 아래 설정에서 'CORS 프록시 사용'을 체크하면 프록시 서버를 통해 이미지를 우회 다운로드합니다.</li>
+            <li><strong>크롬 확장 프로그램:</strong> 'Allow CORS: Access-Control-Allow-Origin' 확장 프로그램을 켜면 브라우저 제약이 완전히 풀립니다.</li>
+            <li><strong>개발자도구 콘솔(F12) 직행:</strong> 해당 업무 사이트 화면에서 F12 콘솔에 직접 스크립트를 넣으면 같은 출처로 취급되어 100% 막힘없이 즉시 ZIP 저장이 가능합니다.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end">
+        <button id="btnConfirmHelp" class="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+    <!-- Step 1: Input & Options -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 transition-all">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">1</span>
+          <h2 class="text-base font-bold text-slate-900">HTML 소스 또는 텍스트 입력</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnLoadSample" class="text-xs text-blue-600 hover:text-blue-800 font-medium px-2.5 py-1 rounded-md hover:bg-blue-50 transition-colors">
+            테스트용 예시 넣기
+          </button>
+          <button id="btnClearInput" class="text-xs text-slate-500 hover:text-slate-700 font-medium px-2.5 py-1 rounded-md hover:bg-slate-100 transition-colors">
+            비우기
+          </button>
+        </div>
+      </div>
+
+      <div class="relative">
+        <textarea id="htmlInput" rows="6" placeholder='<img src="https://example.com/photo1.jpg" alt="이미지 1"> 처럼 alt에 번호가 들어간 HTML이나 img 태그를 복사해서 붙여넣으세요.' class="w-full font-mono text-xs p-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none transition-all placeholder:text-slate-400"></textarea>
+      </div>
+
+      <!-- Settings Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-100 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">정렬 및 번호 추출 방식</label>
+          <select id="sortMode" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <option value="alt_number">alt 속성의 숫자 기준 (이미지 1, 2, ...)</option>
+            <option value="html_order">HTML에 등장한 순서대로 (1부터 순차)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">저장 파일명 포맷</label>
+          <select id="namingFormat" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <option value="img_num">이미지_{num}.{ext} (예: 이미지_01.jpg)</option>
+            <option value="only_num">{num}.{ext} (예: 01.jpg)</option>
+            <option value="custom">직접 지정: [접두어]_{num}.{ext}</option>
+          </select>
+        </div>
+
+        <div id="customPrefixGroup" class="hidden">
+          <label class="block font-semibold text-slate-700 mb-1">사용자 지정 파일 접두어</label>
+          <input type="text" id="customPrefix" value="photo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">숫자 자릿수 맞춤 (Zero-padding)</label>
+          <select id="digitPadding" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <option value="2">2자리 (01, 02, ... 10)</option>
+            <option value="3">3자리 (001, 002, ... 010)</option>
+            <option value="1">자릿수 맞춤 없음 (1, 2, ... 10)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">ZIP 파일 이름</label>
+          <input type="text" id="zipFileName" value="downloaded_images.zip" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+      </div>
+
+      <div class="mt-4 pt-3 flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+          <input type="checkbox" id="useCorsProxy" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+          <span>외부 이미지 다운로드 오류 시 <strong>CORS 프록시 우회</strong> 활성화 (allorigins)</span>
+        </label>
+        <button id="btnParse" class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-sm shadow-blue-500/20 transition-all flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          이미지 태그 분석 및 목록 생성
+        </button>
+      </div>
+    </section>
+
+    <!-- Step 2: Extracted List & Preview -->
+    <section id="resultSection" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 transition-all hidden">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">2</span>
+          <h2 class="text-base font-bold text-slate-900">추출된 이미지 목록 (<span id="totalCountBadge" class="text-blue-600">0</span>개)</h2>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btnSelectAll" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100">
+            전체 선택/해제
+          </button>
+          <button id="btnDownloadZip" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span>순차 다운로드 및 ZIP 생성</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress Bar (Hidden by default) -->
+      <div id="progressContainer" class="hidden mb-5 bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
+        <div class="flex justify-between text-xs font-semibold text-slate-700">
+          <span id="progressStatusText">다운로드 준비 중...</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+          <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div id="progressDetail" class="text-[11px] text-slate-500 font-mono">0 / 0 처리 완료</div>
+      </div>
+
+      <!-- Table -->
+      <div class="overflow-x-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold">
+              <th class="p-3 w-10 text-center">
+                <input type="checkbox" id="headerCheckbox" checked class="w-3.5 h-3.5 text-blue-600 rounded border-slate-300">
+              </th>
+              <th class="p-3 w-16 text-center">순번</th>
+              <th class="p-3 w-20 text-center">미리보기</th>
+              <th class="p-3 w-36">원본 alt 텍스트</th>
+              <th class="p-3 w-48">저장 파일명</th>
+              <th class="p-3">이미지 원본 URL</th>
+              <th class="p-3 w-28 text-center">상태</th>
+            </tr>
+          </thead>
+          <tbody id="imageTableBody" class="divide-y divide-slate-100">
+            <!-- Dynamic Rows -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Step 3: F12 Bookmarklet / Console Script alternative card -->
+    <section class="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-5 sm:p-6 shadow-lg">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 mb-2">실무 생산성 극대화 TIP</span>
+          <h3 class="text-base sm:text-lg font-bold text-white">작업 사이트에서 바로 실행하는 원클릭 콘솔 스크립트</h3>
+          <p class="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+            별도 사이트에 HTML을 복사/붙여넣을 필요 없이, <strong>작업 중인 웹페이지에서 F12(개발자도구) 콘솔에 복사-붙여넣기</strong>만 하면 해당 페이지의 <code class="text-indigo-200">&lt;img alt="이미지 N"&gt;</code> 태그들을 즉시 번호순으로 묶어 ZIP으로 다운로드해 주는 코드입니다. (CORS 문제 100% 없음)
+          </p>
+        </div>
+        <button id="btnCopyConsoleCode" class="shrink-0 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+          <span>콘솔 스크립트 복사</span>
+        </button>
+      </div>
+      <div class="mt-4 bg-slate-950/80 rounded-xl p-3 border border-indigo-900/50 font-mono text-[11px] text-indigo-200 overflow-x-auto max-h-36">
+        <pre id="consoleCodeBlock"><code>/* 작업 중인 웹페이지의 F12 > Console에 붙여넣고 Enter를 누르세요 */
+(async () => {
+  if (!window.JSZip) {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    document.head.appendChild(s);
+    await new Promise(r => s.onload = r);
+  }
+  const imgs = Array.from(document.querySelectorAll('img'))
+    .map(img => {
+      const alt = img.getAttribute('alt') || '';
+      const src = img.currentSrc || img.src;
+      const numMatch = alt.match(/\d+/);
+      const num = numMatch ? parseInt(numMatch[0], 10) : 99999;
+      return { alt, src, num };
+    })
+    .filter(item => item.src && !item.src.startsWith('data:image/svg'))
+    .sort((a, b) => a.num - b.num);
+
+  if (!imgs.length) return alert('이미지를 찾을 수 없습니다.');
+  console.log(`총 ${imgs.length}개 이미지 압축 시작...`);
+  const zip = new JSZip();
+  let count = 0;
+  for (let i = 0; i < imgs.length; i++) {
+    const { src, num } = imgs[i];
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+      const filename = `이미지_${String(i + 1).padStart(2, '0')}.${ext}`;
+      zip.file(filename, blob);
+      count++;
+      console.log(`[${count}/${imgs.length}] ${filename} 추가 완료`);
+    } catch (e) {
+      console.error('다운로드 실패:', src, e);
+    }
+  }
+  const content = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(content);
+  a.download = '이미지_정리_결과.zip';
+  a.click();
+  console.log('ZIP 파일 다운로드 완료!');
+})();</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
+    이미지 순차 다운로더 웹 애플리케이션 · 단일 HTML 파일로 브라우저에서 안전하게 동작합니다.
+  </footer>
+
+  <!-- Application Logic -->
+  <script>
+    // State
+    let parsedImages = [];
+    let isProcessing = false;
+
+    // Elements
+    const htmlInput = document.getElementById('htmlInput');
+    const sortMode = document.getElementById('sortMode');
+    const namingFormat = document.getElementById('namingFormat');
+    const customPrefixGroup = document.getElementById('customPrefixGroup');
+    const customPrefix = document.getElementById('customPrefix');
+    const digitPadding = document.getElementById('digitPadding');
+    const zipFileName = document.getElementById('zipFileName');
+    const useCorsProxy = document.getElementById('useCorsProxy');
+
+    const btnParse = document.getElementById('btnParse');
+    const btnLoadSample = document.getElementById('btnLoadSample');
+    const btnClearInput = document.getElementById('btnClearInput');
+    const resultSection = document.getElementById('resultSection');
+    const totalCountBadge = document.getElementById('totalCountBadge');
+    const imageTableBody = document.getElementById('imageTableBody');
+    const headerCheckbox = document.getElementById('headerCheckbox');
+    const btnSelectAll = document.getElementById('btnSelectAll');
+    const btnDownloadZip = document.getElementById('btnDownloadZip');
+
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressStatusText = document.getElementById('progressStatusText');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressDetail = document.getElementById('progressDetail');
+
+    const helpModal = document.getElementById('helpModal');
+    const btnToggleHelp = document.getElementById('btnToggleHelp');
+    const btnCloseHelp = document.getElementById('btnCloseHelp');
+    const btnConfirmHelp = document.getElementById('btnConfirmHelp');
+    const btnCopyConsoleCode = document.getElementById('btnCopyConsoleCode');
+    const toastContainer = document.getElementById('toastContainer');
+
+    // Toast helper
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      const bgColors = {
+        info: 'bg-slate-900 text-white',
+        success: 'bg-emerald-600 text-white',
+        warning: 'bg-amber-600 text-white',
+        error: 'bg-rose-600 text-white'
+      };
+      toast.className = `${bgColors[type] || bgColors.info} px-4 py-2.5 rounded-xl shadow-lg text-xs font-medium transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto flex items-center gap-2`;
+      toast.textContent = message;
+      toastContainer.appendChild(toast);
+      
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Modal Events
+    btnToggleHelp.addEventListener('click', () => helpModal.classList.remove('hidden'));
+    btnCloseHelp.addEventListener('click', () => helpModal.classList.add('hidden'));
+    btnConfirmHelp.addEventListener('click', () => helpModal.classList.add('hidden'));
+
+    // Custom Prefix Toggle
+    namingFormat.addEventListener('change', () => {
+      if (namingFormat.value === 'custom') {
+        customPrefixGroup.classList.remove('hidden');
+      } else {
+        customPrefixGroup.classList.add('hidden');
+      }
+      updatePlannedFilenames();
+    });
+
+    sortMode.addEventListener('change', () => {
+      if (parsedImages.length > 0) reSortAndRender();
+    });
+
+    digitPadding.addEventListener('change', () => {
+      updatePlannedFilenames();
+    });
+
+    customPrefix.addEventListener('input', () => {
+      updatePlannedFilenames();
+    });
+
+    // Sample Data Loader
+    btnLoadSample.addEventListener('click', () => {
+      htmlInput.value = `<div class="gallery">
+  <img src="https://picsum.photos/id/10/300/200.jpg" alt="이미지 3" />
+  <img src="https://picsum.photos/id/20/300/200.jpg" alt="이미지 1" />
+  <img src="https://picsum.photos/id/30/300/200.jpg" alt="이미지 5" />
+  <img src="https://picsum.photos/id/40/300/200.jpg" alt="이미지 2" />
+  <img src="https://picsum.photos/id/50/300/200.jpg" alt="이미지 4" />
+</div>`;
+      showToast('샘플 HTML이 입력되었습니다. "이미지 태그 분석"을 눌러보세요.', 'info');
+    });
+
+    btnClearInput.addEventListener('click', () => {
+      htmlInput.value = '';
+      parsedImages = [];
+      resultSection.classList.add('hidden');
+      showToast('입력창이 초기화되었습니다.', 'info');
+    });
+
+    // Parsing Logic
+    btnParse.addEventListener('click', () => {
+      const rawText = htmlInput.value.trim();
+      if (!rawText) {
+        showToast('HTML 소스나 텍스트를 먼저 입력해주세요.', 'warning');
+        return;
+      }
+
+      // Regex parser for <img ...> tags to catch both standard and malformed HTML
+      const imgTagRegex = /<img\b[^>]*>/gi;
+      const tags = rawText.match(imgTagRegex) || [];
+
+      if (tags.length === 0) {
+        // Fallback: search for direct image URLs if no tags
+        const urlRegex = /(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp|bmp))/gi;
+        const directUrls = rawText.match(urlRegex) || [];
+        if (directUrls.length === 0) {
+          showToast('입력 내용에서 <img> 태그 또는 이미지 URL을 찾지 못했습니다.', 'warning');
+          return;
+        }
+        parsedImages = directUrls.map((url, idx) => ({
+          id: idx,
+          src: url,
+          alt: `이미지 ${idx + 1}`,
+          extractedNum: idx + 1,
+          selected: true,
+          status: 'idle',
+          statusText: '대기 중'
+        }));
+      } else {
+        parsedImages = tags.map((tagStr, idx) => {
+          // Extract src
+          const srcMatch = tagStr.match(/src=["']([^"']+)["']/i) || tagStr.match(/src=([^\s>]+)/i);
+          const src = srcMatch ? srcMatch[1] : '';
+
+          // Extract alt
+          const altMatch = tagStr.match(/alt=["']([^"']+)["']/i) || tagStr.match(/alt=([^\s>]+)/i);
+          const alt = altMatch ? altMatch[1] : `이미지 ${idx + 1}`;
+
+          // Extract number from alt or tag
+          const numMatch = alt.match(/\d+/);
+          const extractedNum = numMatch ? parseInt(numMatch[0], 10) : (idx + 1);
+
+          return {
+            id: idx,
+            tag: tagStr,
+            src: src,
+            alt: alt,
+            extractedNum: extractedNum,
+            selected: Boolean(src),
+            status: 'idle',
+            statusText: '대기 중'
+          };
+        }).filter(item => Boolean(item.src));
+      }
+
+      if (parsedImages.length === 0) {
+        showToast('유효한 src 경로를 가진 이미지가 없습니다.', 'warning');
+        return;
+      }
+
+      reSortAndRender();
+      resultSection.classList.remove('hidden');
+      resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showToast(`총 ${parsedImages.length}개의 이미지를 성공적으로 추출했습니다!`, 'success');
+    });
+
+    // Helper: get target filename
+    function generateFilename(index, originalSrc) {
+      const padLen = parseInt(digitPadding.value, 10);
+      const numStr = padLen > 1 ? String(index).padStart(padLen, '0') : String(index);
+
+      // detect extension
+      let ext = 'jpg';
+      const cleanUrl = originalSrc.split('?')[0].split('#')[0];
+      const match = cleanUrl.match(/\.([a-zA-Z0-9]+)$/);
+      if (match) {
+        const found = match[1].toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg'].includes(found)) {
+          ext = found === 'jpeg' ? 'jpg' : found;
+        }
+      }
+
+      const mode = namingFormat.value;
+      if (mode === 'only_num') {
+        return `${numStr}.${ext}`;
+      } else if (mode === 'custom') {
+        const p = customPrefix.value.trim() || 'img';
+        return `${p}_${numStr}.${ext}`;
+      } else {
+        return `이미지_${numStr}.${ext}`;
+      }
+    }
+
+    function reSortAndRender() {
+      const mode = sortMode.value;
+      if (mode === 'alt_number') {
+        parsedImages.sort((a, b) => a.extractedNum - b.extractedNum);
+      } else {
+        parsedImages.sort((a, b) => a.id - b.id);
+      }
+      renderTable();
+    }
+
+    function updatePlannedFilenames() {
+      parsedImages.forEach((item, idx) => {
+        const inputElem = document.getElementById(`filename-input-${idx}`);
+        if (inputElem) {
+          inputElem.value = generateFilename(idx + 1, item.src);
+        }
+      });
+    }
+
+    function renderTable() {
+      totalCountBadge.textContent = parsedImages.length;
+      imageTableBody.innerHTML = '';
+
+      parsedImages.forEach((item, index) => {
+        const seq = index + 1;
+        const targetFilename = generateFilename(seq, item.src);
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition-colors border-b border-slate-100';
+
+        tr.innerHTML = `
+          <td class="p-3 text-center">
+            <input type="checkbox" data-idx="${index}" class="row-checkbox w-3.5 h-3.5 text-blue-600 rounded border-slate-300" ${item.selected ? 'checked' : ''}>
+          </td>
+          <td class="p-3 text-center font-bold text-slate-700">${seq}</td>
+          <td class="p-3 text-center">
+            <div class="w-12 h-10 bg-slate-100 rounded-md overflow-hidden border border-slate-200 flex items-center justify-center mx-auto">
+              <img src="${item.src}" alt="${item.alt}" class="w-full h-full object-cover" onerror="this.onerror=null;this.parentElement.innerHTML='<span class=\\'text-[9px] text-slate-400\\'>미리보기<br>불가</span>';">
+            </div>
+          </td>
+          <td class="p-3 font-medium text-slate-800">
+            <span class="inline-block bg-slate-100 px-2 py-0.5 rounded text-[11px] font-mono text-slate-600 truncate max-w-[140px]" title="${item.alt}">${item.alt || '(alt 없음)'}</span>
+          </td>
+          <td class="p-3">
+            <input type="text" id="filename-input-${index}" value="${targetFilename}" class="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-mono text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+          </td>
+          <td class="p-3">
+            <a href="${item.src}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline truncate block max-w-xs font-mono text-[11px]" title="${item.src}">
+              ${item.src}
+            </a>
+          </td>
+          <td class="p-3 text-center" id="status-cell-${index}">
+            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+              대기
+            </span>
+          </td>
+        `;
+
+        imageTableBody.appendChild(tr);
+      });
+
+      // Attach row checkbox handlers
+      document.querySelectorAll('.row-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          const idx = parseInt(e.target.getAttribute('data-idx'), 10);
+          parsedImages[idx].selected = e.target.checked;
+          updateHeaderCheckbox();
+        });
+      });
+      updateHeaderCheckbox();
+    }
+
+    function updateHeaderCheckbox() {
+      const allSelected = parsedImages.length > 0 && parsedImages.every(img => img.selected);
+      const someSelected = parsedImages.some(img => img.selected);
+      headerCheckbox.checked = allSelected;
+      headerCheckbox.indeterminate = !allSelected && someSelected;
+    }
+
+    headerCheckbox.addEventListener('change', () => {
+      const isChecked = headerCheckbox.checked;
+      parsedImages.forEach(img => img.selected = isChecked);
+      document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = isChecked);
+    });
+
+    btnSelectAll.addEventListener('click', () => {
+      const anyUnchecked = parsedImages.some(img => !img.selected);
+      const targetState = anyUnchecked;
+      parsedImages.forEach(img => img.selected = targetState);
+      headerCheckbox.checked = targetState;
+      document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = targetState);
+      showToast(targetState ? '모든 이미지를 선택했습니다.' : '선택을 모두 해제했습니다.', 'info');
+    });
+
+    // Console Code Copy Button
+    btnCopyConsoleCode.addEventListener('click', () => {
+      const code = document.getElementById('consoleCodeBlock').innerText;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(() => {
+          showToast('콘솔 스크립트가 클립보드에 복사되었습니다! F12 콘솔에 붙여넣으세요.', 'success');
+        }).catch(() => fallbackCopy(code));
+      } else {
+        fallbackCopy(code);
+      }
+    });
+
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('콘솔 스크립트가 클립보드에 복사되었습니다!', 'success');
+      } catch (err) {
+        showToast('복사에 실패했습니다. 직접 코드를 드래그해서 복사해주세요.', 'error');
+      }
+      document.body.removeChild(ta);
+    }
+
+    // Download & ZIP Generation
+    btnDownloadZip.addEventListener('click', async () => {
+      if (isProcessing) return;
+
+      const selectedImages = parsedImages.filter(img => img.selected);
+      if (selectedImages.length === 0) {
+        showToast('다운로드할 이미지를 하나 이상 선택해주세요.', 'warning');
+        return;
+      }
+
+      if (typeof JSZip === 'undefined') {
+        showToast('JSZip 라이브러리를 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'warning');
+        return;
+      }
+
+      isProcessing = true;
+      btnDownloadZip.disabled = true;
+      btnDownloadZip.classList.add('opacity-50', 'cursor-not-allowed');
+      progressContainer.classList.remove('hidden');
+
+      const zip = new JSZip();
+      let successCount = 0;
+      let failureCount = 0;
+
+      const total = selectedImages.length;
+      progressBar.style.width = '0%';
+      progressPercent.textContent = '0%';
+      progressStatusText.textContent = `이미지 다운로드 중 (0/${total})...`;
+      progressDetail.textContent = `시작 중...`;
+
+      for (let i = 0; i < total; i++) {
+        const item = selectedImages[i];
+        const originalIndex = parsedImages.indexOf(item);
+        const statusCell = document.getElementById(`status-cell-${originalIndex}`);
+        const filenameInput = document.getElementById(`filename-input-${originalIndex}`);
+        const finalName = filenameInput ? filenameInput.value.trim() : generateFilename(i + 1, item.src);
+
+        // Update status to loading
+        if (statusCell) {
+          statusCell.innerHTML = `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700 animate-pulse">받는 중...</span>`;
+        }
+        progressStatusText.textContent = `[${i + 1}/${total}] ${finalName} 다운로드 중...`;
+
+        try {
+          let fetchUrl = item.src;
+          if (useCorsProxy.checked) {
+            // AllOrigins raw proxy
+            fetchUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(item.src)}`;
+          }
+
+          const response = await fetch(fetchUrl, { mode: 'cors' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+
+          zip.file(finalName, blob);
+          successCount++;
+
+          if (statusCell) {
+            statusCell.innerHTML = `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">완료</span>`;
+          }
+        } catch (err) {
+          console.warn(`이미지 다운로드 실패 (${item.src}):`, err);
+          failureCount++;
+          if (statusCell) {
+            statusCell.innerHTML = `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700" title="${err.message}">실패 (CORS)</span>`;
+          }
+        }
+
+        const currentPct = Math.round(((i + 1) / total) * 100);
+        progressBar.style.width = `${currentPct}%`;
+        progressPercent.textContent = `${currentPct}%`;
+        progressDetail.textContent = `성공: ${successCount}건 / 실패: ${failureCount}건`;
+      }
+
+      if (successCount === 0) {
+        showToast('모든 이미지 다운로드에 실패했습니다. CORS 차단일 가능성이 높으니 콘솔 스크립트 또는 CORS 프록시를 켜보세요.', 'error');
+        progressStatusText.textContent = '다운로드 실패 (CORS 문제 발생)';
+        isProcessing = false;
+        btnDownloadZip.disabled = false;
+        btnDownloadZip.classList.remove('opacity-50', 'cursor-not-allowed');
+        return;
+      }
+
+      progressStatusText.textContent = 'ZIP 압축 파일 생성 중...';
+      try {
+        const zipBlob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        }, (metadata) => {
+          progressDetail.textContent = `압축 진행률: ${Math.round(metadata.percent)}%`;
+        });
+
+        const targetZipName = zipFileName.value.trim() || 'images.zip';
+        if (typeof saveAs !== 'undefined') {
+          saveAs(zipBlob, targetZipName);
+        } else {
+          const downloadUrl = URL.createObjectURL(zipBlob);
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = targetZipName;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(downloadUrl);
+          }, 1000);
+        }
+
+        progressStatusText.textContent = `ZIP 다운로드 완료! (성공 ${successCount}개 / 실패 ${failureCount}개)`;
+        showToast(`성공적으로 ${successCount}개 이미지를 압축하여 저장했습니다!`, 'success');
+      } catch (zipErr) {
+        console.error('ZIP 생성 오류:', zipErr);
+        showToast('ZIP 압축 파일 생성 중 오류가 발생했습니다.', 'error');
+        progressStatusText.textContent = 'ZIP 생성 오류';
+      } finally {
+        isProcessing = false;
+        btnDownloadZip.disabled = false;
+        btnDownloadZip.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    });
+  </script>
+</body>
+</html>
