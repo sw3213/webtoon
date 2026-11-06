@@ -30,7 +30,13 @@ try:
     from bs4 import BeautifulSoup
 except ImportError:  # 처음 실행이면 필요한 라이브러리를 자동 설치
     print('필요한 라이브러리(requests, beautifulsoup4)를 설치합니다...')
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'requests', 'beautifulsoup4'])
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'requests', 'beautifulsoup4'])
+    except Exception:
+        print('[!] 자동 설치 실패. 명령 창에서 직접 실행해 보세요:  py -m pip install requests beautifulsoup4')
+        if not os.environ.get('TOON_BAT'):
+            input('엔터를 누르면 창이 닫힙니다.')
+        sys.exit(1)
     import requests
     from bs4 import BeautifulSoup
 
@@ -316,9 +322,19 @@ def main():
             Downloader(args).run(args.url)
         except KeyboardInterrupt:
             print('\n\n중지했습니다. 다시 실행하면 받은 것은 건너뛰고 이어서 받습니다.')
-    if interactive:
-        input('\n엔터를 누르면 창이 닫힙니다.')
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        print('\n[!] 오류가 났습니다. 위 내용을 캡처해서 보여주세요.')
+    finally:
+        # .py 파일을 직접 더블클릭한 경우에도 창이 바로 닫히지 않게
+        if not os.environ.get('TOON_BAT') and len(sys.argv) == 1:
+            try:
+                input('\n엔터를 누르면 창이 닫힙니다.')
+            except EOFError:
+                pass
