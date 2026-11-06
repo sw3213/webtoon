@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         툰 자동 다운로더 (toon_img)
 // @namespace    https://github.com/sw3213/webtoon
-// @version      5.1
-// @description  id="toon_img" 이미지를 1번부터 순서대로 ZIP으로 저장하고 다음 화로 자동 이동. 이미 받은 화는 건너뜀.
+// @version      5.2
+// @description  id="toon_img" 이미지를 1번부터 순서대로 폴더 또는 ZIP으로 저장하고 다음 화로 자동 이동. 이미 받은 화는 건너뜀.
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_download
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      *
@@ -19,6 +20,8 @@
 
   const KEY_DONE = 'toon_done';   // 받은 화 주소 목록
   const KEY_STOP = 'toon_stop';   // 중지 상태
+  const KEY_MODE = 'toon_mode';   // 'folder' 또는 'zip'
+  const VERSION = '5.2';
   const pageKey = location.href.split('#')[0];
   const done = GM_getValue(KEY_DONE, {});
   const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
@@ -28,11 +31,20 @@
   ui.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:2147483647;background:#1d1c1a;color:#f1eee8;' +
     'padding:14px 16px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.5);font:13px/1.5 -apple-system,"Malgun Gothic",sans-serif;' +
     'min-width:240px;max-width:320px;border:1px solid #ff7a2e';
-  ui.innerHTML = '<div id="tdMsg"></div><div style="margin-top:8px;display:flex;gap:6px"><button id="tdBtn"></button></div>';
+  ui.innerHTML = '<div id="tdMsg"></div><div style="margin-top:8px;display:flex;gap:6px;align-items:center">' +
+    '<button id="tdBtn"></button><button id="tdMode"></button>' +
+    '<span style="margin-left:auto;color:#9b968c;font-size:11px">v' + VERSION + '</span></div>';
   document.body.appendChild(ui);
   const msg = (h) => { ui.querySelector('#tdMsg').innerHTML = h; };
   const btn = ui.querySelector('#tdBtn');
   btn.style.cssText = 'border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer;background:#ff7a2e;color:#1a0f08';
+
+  const mode = GM_getValue(KEY_MODE, 'folder');
+  const modeBtn = ui.querySelector('#tdMode');
+  modeBtn.style.cssText = 'border:1px solid #ff7a2e;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;background:transparent;color:#ff7a2e';
+  modeBtn.textContent = mode === 'zip' ? '저장: ZIP' : '저장: 폴더';
+  modeBtn.title = '눌러서 폴더/ZIP 바꾸기';
+  modeBtn.onclick = () => { GM_setValue(KEY_MODE, mode === 'zip' ? 'folder' : 'zip'); location.reload(); };
 
   const stopped = GM_getValue(KEY_STOP, false);
   btn.textContent = stopped ? '▶ 자동 다운로드 켜기' : '■ 중지';
@@ -105,6 +117,24 @@
     return [...parts, ...central, new Uint8Array(e.buffer)];
   }
 
+  // 폴더 저장: 다운로드 폴더/작품명/회차/001.jpg
+  function series(t) {
+    const m = t.match(/^(.*?)\s*(?:제?\s*\d+\s*(?:화|회|편)|ep\.?\s*\d+)/i);
+    return clean((m && m[1].trim() ? m[1] : t).split(/\s[-|:]\s/)[0]) || '웹툰';
+  }
+  function gmDownload(url, name) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('시간 초과')), 90000);
+      GM_download({
+        url, name, saveAs: false, conflictAction: 'overwrite',
+        headers: { Referer: location.href },
+        onload: () => { clearTimeout(timer); resolve(); },
+        onerror: (e) => { clearTimeout(timer); reject(new Error((e && (e.error || e.details)) || '다운로드 실패')); },
+        ontimeout: () => { clearTimeout(timer); reject(new Error('시간 초과')); },
+      });
+    });
+  }
+
   // 이미지 받기: arraybuffer로 받아 이 스크립트 쪽 Uint8Array로 변환
   function getBytes(url) {
     return new Promise((resolve, reject) => {
@@ -159,11 +189,27 @@
     const fails = [];
     msg(`📥 <b>${esc(title)}</b><br>받는 중 0 / ${total}`);
 
+    const folder = series(title) + '/' + title + '/';
+
     async function worker() {
       while (cur < total) {
         const i = cur++;
         for (let t = 0; t < 3; t++) {
           try {
+            if (mode === 'folder') {
+              const m = urls[i].split(/[?#]/)[0].match(/\.(jpe?g|png|webp|gif|avif)$/i);
+              const name = folder + String(i + 1).padStart(pad, '0') + '.' + (m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg');
+              try {
+                await gmDownload(urls[i], name);
+              } catch (e) {
+                // 주소로 직접 저장이 안 되면 내용을 받아서 저장
+                const { bytes } = await getBytes(urls[i]);
+                const bu = URL.createObjectURL(new Blob([bytes]));
+                try { await gmDownload(bu, name); } finally { setTimeout(() => URL.revokeObjectURL(bu), 60000); }
+              }
+              ok++;
+              break;
+            }
             const { bytes, type } = await getBytes(urls[i]);
             const m = urls[i].split(/[?#]/)[0].match(/\.(jpe?g|png|webp|gif|avif)$/i);
             const ext = EXT[type] || (m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg');
@@ -184,8 +230,15 @@
       return;
     }
 
+    if (mode === 'folder') {
+      msg(`✅ <b>${esc(title)}</b> 저장 (${total}장)<br><span style="color:#9b968c">다운로드/${esc(folder)}</span>`);
+      done[pageKey] = folder;
+      GM_setValue(KEY_DONE, done);
+      goNext();
+      return;
+    }
+
     msg(`🗜 ZIP 만드는 중…`);
-    await new Promise((r) => setTimeout(r, 50));   // 메시지가 화면에 보이도록
     const out = makeZip(files);   // 1번부터 순서대로
     const zipName = title + '.zip';
     msg(`✅ <b>${esc(zipName)}</b> 저장 (${total}장)`);
