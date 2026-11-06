@@ -270,7 +270,11 @@ class Downloader:
             try:
                 soup = self.fetch_page(url)
             except Exception as e:
-                reason = f'페이지 접속 실패({e}). 다시 시작하면 이어서 받습니다.'
+                if 'reset' in str(e).lower() or '10054' in str(e) or 'aborted' in str(e).lower():
+                    reason = ('사이트가 접속을 끊었습니다. 크롬에서 이 링크가 열리는지 확인해 보세요. '
+                              '크롬에서도 안 열리면 차단된 사이트이고, 크롬에서는 열리면 사이트가 프로그램 접속을 막는 것입니다.')
+                else:
+                    reason = f'페이지 접속 실패({e}). 다시 시작하면 이어서 받습니다.'
                 break
             if soup is None:
                 reason = '다음 페이지가 없습니다(404). 마지막 화까지 받았습니다.'
