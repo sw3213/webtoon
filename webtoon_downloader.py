@@ -153,7 +153,7 @@ class Downloader:
                 v = (img.get(attr) or '').strip()
                 if not v or v.startswith('data:'):
                     continue
-                if attr == 'src' and re.search(r'spacer|loading|blank', v, re.I):
+                if re.search(r'spacer|loading|blank|placeholder', v, re.I):  # 자리표시 이미지
                     continue
                 urls.append(urljoin(page_url, v))
                 break

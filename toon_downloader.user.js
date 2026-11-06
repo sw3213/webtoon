@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         툰 자동 다운로더 (toon_img)
 // @namespace    https://github.com/sw3213/webtoon
-// @version      5.2
+// @version      5.4
 // @description  id="toon_img" 이미지를 1번부터 순서대로 폴더 또는 ZIP으로 저장하고 다음 화로 자동 이동. 이미 받은 화는 건너뜀.
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -21,7 +21,7 @@
   const KEY_DONE = 'toon_done';   // 받은 화 주소 목록
   const KEY_STOP = 'toon_stop';   // 중지 상태
   const KEY_MODE = 'toon_mode';   // 'folder' 또는 'zip'
-  const VERSION = '5.2';
+  const VERSION = '5.4';
   const pageKey = location.href.split('#')[0];
   const done = GM_getValue(KEY_DONE, {});
   const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
@@ -59,19 +59,45 @@
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   function nextUrl() {
-    for (const a of document.querySelectorAll('a[href]')) {
-      const t = (a.textContent + ' ' + (a.title || '')).trim();
-      if (/다음\s*(화|회|편)|^다음$|next|▶/i.test(t) && !/이전|prev|◀|목록/i.test(t)) {
-        const h = a.href;
-        if (h && !h.startsWith('javascript:') && h.split('#')[0] !== pageKey) return h;
-      }
+    const BAD = /이전|prev|◀|‹|«|목록|back/i;
+    const okUrl = (h) => h && !/^javascript:/i.test(h) && h.split('#')[0] !== pageKey;
+    const textOf = (el) => [el.textContent, el.title, el.getAttribute('aria-label'),
+      ...Array.from(el.querySelectorAll('img')).map((i) => i.alt)].join(' ').replace(/\s+/g, ' ').trim();
+    const links = Array.from(document.querySelectorAll('a[href]'));
+
+    const rel = document.querySelector('a[rel~="next"][href], link[rel~="next"][href]');
+    if (rel && okUrl(rel.href)) return rel.href;
+    // 1) 글자: 다음화/다음 회/다음편/Next/▶
+    for (const a of links) {
+      const t = textOf(a);
+      if (/다음\s*(화|회|편|에피소드)|^다음$|^next|▶|›|»/i.test(t) && !BAD.test(t) && okUrl(a.href)) return a.href;
     }
+    // 2) id/class 에 next (아이콘만 있는 버튼)
+    for (const a of links) {
+      const at = (a.id || '') + ' ' + (a.getAttribute('class') || '') + ' ' +
+        Array.from(a.querySelectorAll('*')).map((c) => c.getAttribute('class') || '').join(' ');
+      if (/next|right|forward/i.test(at) && !/prev|left|back/i.test(at) && okUrl(a.href)) return a.href;
+    }
+    // 3) onclick 으로 이동하는 버튼
+    for (const el of document.querySelectorAll('[onclick]')) {
+      const t = textOf(el) + ' ' + (el.id || '') + ' ' + (el.getAttribute('class') || '');
+      if (!/다음|next/i.test(t) || BAD.test(t)) continue;
+      const m = (el.getAttribute('onclick') || '').match(/['"]([^'"]*[/?][^'"]*)['"]/);
+      if (m) { try { const u = new URL(m[1], location.href).href; if (okUrl(u)) return u; } catch (e) { /* 무시 */ } }
+    }
+    // 4) 느슨하게: '다음' 이 들어간 링크
+    for (const a of links) {
+      const t = textOf(a);
+      if (/다음/.test(t) && !BAD.test(t) && t.length <= 15 && okUrl(a.href)) return a.href;
+    }
+    console.log('[툰] 다음 화 후보를 못 찾음. 다음/next 관련 요소:',
+      Array.from(document.querySelectorAll('a,button,[onclick]')).filter((e) => /다음|next/i.test(e.outerHTML)).map((e) => e.outerHTML.slice(0, 200)));
     return null;
   }
 
   function goNext() {
     const n = nextUrl();
-    if (!n) { msg(ui.querySelector('#tdMsg').innerHTML + '<br>🎉 다음 화가 없습니다. 끝!'); return; }
+    if (!n) { msg(ui.querySelector('#tdMsg').innerHTML + '<br>🎉 다음 화 버튼을 못 찾아 끝냈어요. 끝!<br><span style="color:#9b968c">다음 화가 있다면 F12 → Console의 [툰] 줄을 캡처해 주세요</span>'); return; }
     let sec = 3;
     const tick = () => {
       if (GM_getValue(KEY_STOP, false)) return;
@@ -173,14 +199,24 @@
   }
 
   const urls = [];
+  const PLACEHOLDER = /spacer|loading|blank|placeholder/i;
   box.querySelectorAll('img').forEach((img) => {
+    // 1) 이미 화면에 제대로 떠 있는 이미지는 실제로 보이는 주소를 그대로 사용
+    const cur = img.currentSrc || img.src || '';
+    if (img.complete && img.naturalWidth >= 100 && cur && !cur.startsWith('data:') && !PLACEHOLDER.test(cur)) {
+      urls.push(cur);
+      return;
+    }
+    // 2) 아직 안 뜬 이미지는 지연 로딩 속성에서 진짜 주소 찾기 (자리표시 주소는 건너뜀)
     for (const k of ['data-src', 'data-original', 'data-url', 'data-lazy-src', 'src']) {
       const v = (img.getAttribute(k) || '').trim();
-      if (!v || v.startsWith('data:') || (k === 'src' && /spacer|loading|blank/i.test(v))) continue;
+      if (!v || v.startsWith('data:') || PLACEHOLDER.test(v)) continue;
       urls.push(new URL(v, location.href).href);
       return;
     }
+    console.warn('[툰] 주소를 못 찾은 이미지:', img.outerHTML.slice(0, 300));
   });
+  console.log('[툰] 이미지 ' + urls.length + '장', urls);
   if (!urls.length) { msg('❌ toon_img 안에서 이미지를 못 찾았어요.'); return; }
 
   (async () => {
