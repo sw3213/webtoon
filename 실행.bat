@@ -1,10 +1,9 @@
 @echo off
 chcp 65001 > nul
 cd /d "%~dp0"
-python webtoon_downloader.py
-if errorlevel 9009 (
-  echo.
-  echo Python이 설치되어 있지 않습니다. https://www.python.org/downloads 에서 설치하세요.
-  echo 설치할 때 "Add python.exe to PATH" 를 꼭 체크하세요.
-  pause
-)
+where python >nul 2>nul && (python webtoon_downloader.py & goto :eof)
+where py >nul 2>nul && (py webtoon_downloader.py & goto :eof)
+echo.
+echo Python을 찾을 수 없습니다. 설치 후 컴퓨터를 재시작해 보세요.
+echo 설치: https://www.python.org/downloads
+pause
