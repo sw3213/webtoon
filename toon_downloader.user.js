@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         툰 자동 다운로더 (toon_img)
 // @namespace    https://github.com/sw3213/webtoon
-// @version      5.4
+// @version      5.5
 // @description  id="toon_img" 이미지를 1번부터 순서대로 폴더 또는 ZIP으로 저장하고 다음 화로 자동 이동. 이미 받은 화는 건너뜀.
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
@@ -21,7 +21,7 @@
   const KEY_DONE = 'toon_done';   // 받은 화 주소 목록
   const KEY_STOP = 'toon_stop';   // 중지 상태
   const KEY_MODE = 'toon_mode';   // 'folder' 또는 'zip'
-  const VERSION = '5.4';
+  const VERSION = '5.5';
   const pageKey = location.href.split('#')[0];
   const done = GM_getValue(KEY_DONE, {});
   const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
@@ -32,7 +32,7 @@
     'padding:14px 16px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.5);font:13px/1.5 -apple-system,"Malgun Gothic",sans-serif;' +
     'min-width:240px;max-width:320px;border:1px solid #ff7a2e';
   ui.innerHTML = '<div id="tdMsg"></div><div style="margin-top:8px;display:flex;gap:6px;align-items:center">' +
-    '<button id="tdBtn"></button><button id="tdMode"></button>' +
+    '<button id="tdBtn"></button><button id="tdMode"></button><button id="tdRe">↻ 다시 받기</button>' +
     '<span style="margin-left:auto;color:#9b968c;font-size:11px">v' + VERSION + '</span></div>';
   document.body.appendChild(ui);
   const msg = (h) => { ui.querySelector('#tdMsg').innerHTML = h; };
@@ -45,6 +45,18 @@
   modeBtn.textContent = mode === 'zip' ? '저장: ZIP' : '저장: 폴더';
   modeBtn.title = '눌러서 폴더/ZIP 바꾸기';
   modeBtn.onclick = () => { GM_setValue(KEY_MODE, mode === 'zip' ? 'folder' : 'zip'); location.reload(); };
+
+  // 다시 받기: 이 화의 기록을 지우고 다시 받음 (자동 이동 없이)
+  const reBtn = ui.querySelector('#tdRe');
+  reBtn.style.cssText = modeBtn.style.cssText;
+  reBtn.title = '이 화를 처음부터 다시 받기';
+  reBtn.onclick = () => {
+    const d = GM_getValue(KEY_DONE, {});
+    delete d[pageKey];
+    GM_setValue(KEY_DONE, d);
+    GM_setValue(KEY_STOP, false);
+    location.reload();
+  };
 
   const stopped = GM_getValue(KEY_STOP, false);
   btn.textContent = stopped ? '▶ 자동 다운로드 켜기' : '■ 중지';
