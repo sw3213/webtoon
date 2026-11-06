@@ -8,9 +8,13 @@ on:
         required: true
         default: 'https://...'
       max_episodes:
-        description: '다운로드할 최대 회차 수'
+        description: '받을 회차 수 (1 = 입력한 페이지만, 2 이상이면 다음화를 따라감)'
         required: true
-        default: '50'
+        default: '1'
+      container_id:
+        description: '이미지가 들어있는 요소 id'
+        required: true
+        default: 'toon_img'
 
 jobs:
   download:
@@ -30,7 +34,7 @@ jobs:
 
       - name: 웹툰 자동 다운로드 및 ZIP 생성 실행
         run: |
-          python webtoon_batch_downloader.py "${{ github.event.inputs.start_url }}" "${{ github.event.inputs.max_episodes }}"
+          python webtoon_batch_downloader.py "${{ github.event.inputs.start_url }}" "${{ github.event.inputs.max_episodes }}" --id "${{ github.event.inputs.container_id }}"
 
       - name: 완성된 ZIP 파일 업로드
         uses: actions/upload-artifact@v4

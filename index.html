@@ -104,6 +104,17 @@
         </div>
       </div>
 
+      <!-- 링크만으로 다운로드 -->
+      <div class="mb-4 p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
+        <label for="pageUrlInput" class="block text-xs font-bold text-blue-900 mb-1.5">🔗 웹툰 페이지 링크만 넣고 바로 다운로드</label>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input type="url" id="pageUrlInput" placeholder="https://사이트주소/웹툰/1화" class="flex-1 min-w-0 bg-white border border-blue-300 rounded-lg p-2.5 text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <button id="btnFetchUrl" class="px-4 py-2.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 font-semibold text-xs rounded-lg">링크 분석만</button>
+          <button id="btnUrlOneClick" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg">분석 + ZIP 다운로드</button>
+        </div>
+        <p class="text-[11px] text-blue-800 mt-1.5 leading-relaxed">링크의 페이지를 불러와 <code class="bg-blue-100 px-1 rounded">#toon_img</code> 안 이미지를 1번부터 끝까지 순서대로 받아 ZIP으로 묶습니다. 브라우저 보안(CORS) 때문에 공개 프록시를 경유하며, 사이트가 막으면 아래에 소스를 직접 붙여넣거나 Python 프로그램(<code class="bg-blue-100 px-1 rounded">webtoon_batch_downloader.py</code>)을 사용하세요.</p>
+      </div>
+
       <div class="relative">
         <textarea id="htmlInput" rows="7" placeholder='웹툰 사이트의 소스(Ctrl+U 전체 복사 또는 <div id="toon_img"> 영역 복사)를 여기에 붙여넣으세요.&#10;웹페이지 전체 소스를 그대로 붙여넣어도 프로그램이 자동으로 div id="toon_img" 안의 웹툰 이미지만 쏙 뽑아냅니다.' class="w-full font-mono text-xs p-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none transition-all placeholder:text-slate-400"></textarea>
       </div>
@@ -311,6 +322,9 @@
     const digitPadding = document.getElementById('digitPadding');
     const zipFileName = document.getElementById('zipFileName');
     const useCorsProxy = document.getElementById('useCorsProxy');
+    const pageUrlInput = document.getElementById('pageUrlInput');
+    const btnFetchUrl = document.getElementById('btnFetchUrl');
+    const btnUrlOneClick = document.getElementById('btnUrlOneClick');
 
     const btnParse = document.getElementById('btnParse');
     const btnLoadSample = document.getElementById('btnLoadSample');
@@ -414,11 +428,22 @@
     });
 
     // Robust HTML Parsing Logic using DOMParser
-    btnParse.addEventListener('click', () => {
+    let currentBaseUrl = '';
+    htmlInput.addEventListener('input', () => { currentBaseUrl = ''; });
+
+    function resolveUrl(src) {
+      if (!src || src.startsWith('data:')) return src;
+      try { return new URL(src, currentBaseUrl || undefined).href; } catch (e) { return src; }
+    }
+
+    btnParse.addEventListener('click', () => { parseHtmlInput(); });
+
+    // 반환값: 추출 성공 여부
+    function parseHtmlInput() {
       const rawText = htmlInput.value.trim();
       if (!rawText) {
         showToast('HTML 소스를 먼저 붙여넣어 주세요.', 'warning');
-        return;
+        return false;
       }
 
       const parser = new DOMParser();
@@ -456,19 +481,20 @@
 
       if (imgNodes.length === 0) {
         showToast('붙여넣은 내용에서 이미지 태그를 찾지 못했습니다.', 'warning');
-        return;
+        return false;
       }
 
       parsedImages = imgNodes.map((img, idx) => {
         // prioritize real image URL over placeholder
         const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-original') || img.getAttribute('data-url');
         const normalSrc = img.getAttribute('src');
-        let src = dataSrc || normalSrc || '';
+        let src = (dataSrc || normalSrc || '').trim();
 
         // If normalSrc is a tiny spacer and data-src exists, prefer data-src
         if (dataSrc && (!normalSrc || normalSrc.includes('data:image/svg') || normalSrc.includes('spacer') || normalSrc.includes('loading'))) {
           src = dataSrc;
         }
+        src = resolveUrl(src);
 
         const alt = img.getAttribute('alt') || `이미지 ${idx + 1}`;
         const numMatch = alt.match(/\d+/);
@@ -487,7 +513,7 @@
 
       if (parsedImages.length === 0) {
         showToast('유효한 이미지 주소를 가진 태그가 없습니다.', 'warning');
-        return;
+        return false;
       }
 
       if (isContainerDetected) {
@@ -501,6 +527,70 @@
       resultSection.classList.remove('hidden');
       resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
       showToast(`총 ${parsedImages.length}개의 웹툰 이미지를 성공적으로 추출했습니다!`, 'success');
+      return true;
+    }
+
+    // 링크로 페이지 HTML 가져오기 (직접 → 프록시 순서로 시도)
+    async function fetchPageHtml(url) {
+      const attempts = [
+        url,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://corsproxy.io/?${encodeURIComponent(url)}`
+      ];
+      for (const target of attempts) {
+        try {
+          const res = await fetch(target);
+          if (!res.ok) continue;
+          const text = await res.text();
+          if (text && text.length > 50) return text;
+        } catch (e) {
+          console.warn('페이지 불러오기 실패, 다음 방법 시도:', target, e);
+        }
+      }
+      throw new Error('페이지를 불러오지 못했습니다.');
+    }
+
+    function makeZipNameFromDoc(html) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const title = (doc.title || '').trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 80);
+      return title ? `${title}.zip` : '';
+    }
+
+    async function loadFromUrl() {
+      let url = pageUrlInput.value.trim();
+      if (!url) { showToast('웹툰 페이지 링크를 입력해주세요.', 'warning'); return false; }
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      if (isProcessing) return false;
+
+      btnFetchUrl.disabled = btnUrlOneClick.disabled = true;
+      showToast('페이지를 불러오는 중...', 'info');
+      try {
+        const html = await fetchPageHtml(url);
+        htmlInput.value = html;
+        currentBaseUrl = url;
+        if (!targetContainerId.value.trim()) targetContainerId.value = 'toon_img';
+        const zipName = makeZipNameFromDoc(html);
+        if (zipName) zipFileName.value = zipName;
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        if (!doc.getElementById(targetContainerId.value.trim())) {
+          showToast(`페이지에서 #${targetContainerId.value.trim()} 를 찾지 못했습니다. (JS로 이미지를 그리는 사이트일 수 있음)`, 'warning');
+          return false;
+        }
+        return parseHtmlInput();
+      } catch (e) {
+        showToast('링크 불러오기 실패: 사이트가 차단했을 수 있습니다. 소스를 직접 붙여넣거나 Python 프로그램을 사용하세요.', 'error');
+        return false;
+      } finally {
+        btnFetchUrl.disabled = btnUrlOneClick.disabled = false;
+      }
+    }
+
+    btnFetchUrl.addEventListener('click', () => { loadFromUrl(); });
+    btnUrlOneClick.addEventListener('click', async () => {
+      if (await loadFromUrl()) await downloadSelectedAsZip();
+    });
+    pageUrlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') btnUrlOneClick.click();
     });
 
     // Helper: get target filename
@@ -651,15 +741,14 @@
 
     // Helper: fetch with fallback proxies
     async function fetchImageBlob(url, proxyEnabled) {
-      // 1. Try direct fetch first if proxy not forced
-      if (!proxyEnabled) {
-        try {
-          const res = await fetch(url, { mode: 'cors' });
-          if (res.ok) return await res.blob();
-        } catch (e) {
-          console.warn('Direct fetch failed, falling back to proxy:', e);
-        }
+      // 1. 항상 직접 다운로드를 먼저 시도 (실패하면 프록시로)
+      try {
+        const res = await fetch(url, { mode: 'cors' });
+        if (res.ok) return await res.blob();
+      } catch (e) {
+        console.warn('Direct fetch failed, falling back to proxy:', e);
       }
+      if (!proxyEnabled) throw new Error('직접 다운로드 실패 (CORS 프록시 꺼짐)');
 
       // 2. Try AllOrigins
       try {
@@ -683,7 +772,9 @@
     }
 
     // Download & ZIP Generation
-    btnDownloadZip.addEventListener('click', async () => {
+    btnDownloadZip.addEventListener('click', () => { downloadSelectedAsZip(); });
+
+    async function downloadSelectedAsZip() {
       if (isProcessing) return;
 
       const selectedImages = parsedImages.filter(img => img.selected);
@@ -793,7 +884,7 @@
         btnDownloadZip.disabled = false;
         btnDownloadZip.classList.remove('opacity-50', 'cursor-not-allowed');
       }
-    });
+    }
   </script>
 </body>
 </html>
