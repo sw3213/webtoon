@@ -1,0 +1,39 @@
+name: 웹툰 자동 순차 다운로더
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_url:
+        description: '웹툰 1화 페이지 주소 (URL)'
+        required: true
+        default: 'https://...'
+      max_episodes:
+        description: '다운로드할 최대 회차 수'
+        required: true
+        default: '50'
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 코드 불러오기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 환경 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 필수 라이브러리 설치
+        run: |
+          pip install requests beautifulsoup4
+
+      - name: 웹툰 자동 다운로드 및 ZIP 생성 실행
+        run: |
+          python webtoon_batch_downloader.py "${{ github.event.inputs.start_url }}" "${{ github.event.inputs.max_episodes }}"
+
+      - name: 완성된 ZIP 파일 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: 웹툰_회차별_ZIP_모음
+          path: output_zips/*.zip
