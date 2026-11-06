@@ -17,7 +17,7 @@ if not defined PY (
   exit /b
 )
 echo 사용하는 Python: %PY%
-%PY% webtoon_downloader.py
+%PY% webtoon_gui.py
 echo.
 echo 창을 닫으려면 아무 키나 누르세요.
 pause > nul
