@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         툰 자동 다운로더 (toon_img)
+// @name         툰 자동 다운로더
 // @namespace    https://github.com/sw3213/webtoon
-// @version      5.6
-// @description  id="toon_img" 이미지를 1번부터 순서대로 폴더 또는 ZIP으로 저장하고 다음 화로 자동 이동. 이미 받은 화는 건너뜀.
+// @version      5.7
+// @description  이미지 영역(toon_img / scroll-list)의 이미지를 1번부터 순서대로 폴더 또는 ZIP으로 저장하고 다음 화로 자동 이동. 이미 받은 화는 건너뜀.
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
@@ -12,16 +12,31 @@
 // @run-at       document-idle
 // ==/UserScript==
 
-(function () {
+(async function () {
   'use strict';
 
-  const box = document.getElementById('toon_img');
+  // ---------- 사이트별 설정 (여러 사이트를 한꺼번에 지원)
+  const CONTAINER_IDS = ['toon_img', 'scroll-list'];            // 이미지가 들어있는 영역 id
+  const NEXT_BUTTONS = ['#episode-nav li:nth-child(3) button'];  // '다음 화' 버튼 (있으면 우선 사용)
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const findBox = () => CONTAINER_IDS.map((id) => document.getElementById(id)).find((el) => el && el.querySelector('img'));
+  // 이미지가 늦게 붙는 사이트: 최대 15초 기다림
+  let box = findBox();
+  for (let i = 0; !box && i < 30; i++) { await sleep(500); box = findBox(); }
   if (!box) return;
+  // 이미지 개수가 더 늘지 않을 때까지 잠깐 기다림
+  for (let i = 0, last = -1; i < 10; i++) {
+    const n = box.querySelectorAll('img').length;
+    if (n === last) break;
+    last = n;
+    await sleep(700);
+  }
 
   const KEY_DONE = 'toon_done';   // 받은 화 주소 목록
   const KEY_STOP = 'toon_stop';   // 중지 상태
   const KEY_MODE = 'toon_mode';   // 'folder' 또는 'zip'
-  const VERSION = '5.6';
+  const VERSION = '5.7';
   const pageKey = location.href.split('#')[0];
   const done = GM_getValue(KEY_DONE, {});
   const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
@@ -116,14 +131,34 @@
     return null;
   }
 
+  function nextButton() {
+    for (const sel of NEXT_BUTTONS) {
+      const b = document.querySelector(sel);
+      if (b && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && !/disabled/i.test(b.className)) return b;
+    }
+    return null;
+  }
+
   function goNext() {
-    const n = nextUrl();
-    if (!n) { msg(ui.querySelector('#tdMsg').innerHTML + '<br>🎉 다음 화 버튼을 못 찾아 끝냈어요. 끝!<br><span style="color:#9b968c">다음 화가 있다면 F12 → Console의 [툰] 줄을 캡처해 주세요</span>'); return; }
+    const b = nextButton();
+    const n = b ? null : nextUrl();
+    if (!b && !n && NEXT_BUTTONS.some((sel) => document.querySelector(sel))) {
+      msg(ui.querySelector('#tdMsg').innerHTML + '<br>🎉 마지막 화까지 받았어요. 끝!');   // 다음 화 버튼이 꺼져 있음
+      return;
+    }
+    if (!b && !n) { msg(ui.querySelector('#tdMsg').innerHTML + '<br>🎉 다음 화 버튼을 못 찾아 끝냈어요. 끝!<br><span style="color:#9b968c">다음 화가 있다면 F12 → Console의 [툰] 줄을 캡처해 주세요</span>'); return; }
     let sec = WAIT;
     const tick = () => {
       if (GM_getValue(KEY_STOP, false)) return;
       ui.querySelector('#tdNext').textContent = sec + '초 후 다음 화로 이동…';
-      if (sec-- <= 0) location.href = n; else setTimeout(tick, 1000);
+      if (sec-- > 0) { setTimeout(tick, 1000); return; }
+      if (n) { location.href = n; return; }
+      b.click();
+      // 페이지가 새로 열리지 않고 화면만 바뀌는 사이트: 주소가 바뀌었으면 새로고침해서 다시 시작
+      setTimeout(() => {
+        if (location.href.split('#')[0] !== pageKey) location.reload();
+        else ui.querySelector('#tdNext').textContent = '다음 화 버튼을 눌렀지만 넘어가지 않았어요. (마지막 화일 수 있어요)';
+      }, 4000);
     };
     ui.querySelector('#tdMsg').insertAdjacentHTML('beforeend', '<div id="tdNext" style="color:#9b968c;margin-top:4px"></div>');
     tick();
@@ -238,7 +273,7 @@
     console.warn('[툰] 주소를 못 찾은 이미지:', img.outerHTML.slice(0, 300));
   });
   console.log('[툰] 이미지 ' + urls.length + '장', urls);
-  if (!urls.length) { msg('❌ toon_img 안에서 이미지를 못 찾았어요.'); return; }
+  if (!urls.length) { msg('❌ #' + esc(box.id) + ' 안에서 이미지를 못 찾았어요.'); return; }
 
   (async () => {
     const total = urls.length, pad = Math.max(3, String(total).length), files = new Array(total);
